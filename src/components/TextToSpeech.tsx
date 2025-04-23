@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Volume2, VolumeX, Play, Pause, Settings, Mic, Save, Repeat } from 'lucide-react';
+import { Volume2, VolumeX, Play, Pause, Settings, Mic, Save, Repeat, Timer } from 'lucide-react';
+import SpeechProgress from './SpeechProgress';
 
 const TextToSpeech = () => {
   const [text, setText] = useState('');
@@ -14,9 +15,15 @@ const TextToSpeech = () => {
   const [loopEnabled, setLoopEnabled] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [totalWords, setTotalWords] = useState(0);
+  const [timerEnabled, setTimerEnabled] = useState(false);
+  const [timerMinutes, setTimerMinutes] = useState(30);
+  const [remainingTime, setRemainingTime] = useState(0);
   const navigate = useNavigate();
   
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const emotions = ['neutral', 'happy', 'sad', 'angry', 'excited'];
 
   useEffect(() => {
@@ -76,6 +83,35 @@ const TextToSpeech = () => {
     }
   };
 
+  const startTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    
+    setRemainingTime(timerMinutes * 60);
+    
+    timerRef.current = setInterval(() => {
+      setRemainingTime(prev => {
+        if (prev <= 1) {
+          stop();
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const stopTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setRemainingTime(0);
+  };
+
   const speak = async () => {
     if (utteranceRef.current) {
       window.speechSynthesis.cancel();
@@ -112,17 +148,34 @@ const TextToSpeech = () => {
         }
       }
 
+      // Set up word tracking
+      const words = text.split(/\s+/);
+      setTotalWords(words.length);
+      setCurrentWordIndex(0);
+
+      utterance.onboundary = (event) => {
+        if (event.name === 'word') {
+          setCurrentWordIndex(prev => Math.min(prev + 1, words.length));
+        }
+      };
+
       utterance.onend = () => {
         if (loopEnabled) {
           speak();
         } else {
           setIsPaused(true);
+          setCurrentWordIndex(0);
+          stopTimer();
         }
       };
 
       utteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
       setIsPaused(false);
+      
+      if (timerEnabled) {
+        startTimer();
+      }
     }
   };
 
@@ -138,7 +191,17 @@ const TextToSpeech = () => {
   const stop = () => {
     window.speechSynthesis.cancel();
     setIsPaused(true);
+    setCurrentWordIndex(0);
+    stopTimer();
   };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
@@ -197,6 +260,13 @@ const TextToSpeech = () => {
             onChange={(e) => setText(e.target.value)}
           />
 
+          <SpeechProgress 
+            text={text}
+            isPlaying={!isPaused}
+            currentWordIndex={currentWordIndex}
+            totalWords={totalWords}
+          />
+
           <div className="flex flex-wrap gap-4 mt-4">
             <button
               onClick={speak}
@@ -234,6 +304,38 @@ const TextToSpeech = () => {
               <Repeat className="w-5 h-5 mr-2" />
               Loop
             </button>
+
+            <div className="flex items-center gap-2">
+              <Timer className="w-5 h-5 text-gray-600" />
+              <input
+                type="number"
+                min="1"
+                max="120"
+                value={timerMinutes}
+                onChange={(e) => setTimerMinutes(Math.min(120, Math.max(1, parseInt(e.target.value) || 30)))}
+                className="w-16 p-1 border rounded"
+                disabled={!isPaused}
+              />
+              <span className="text-gray-600">minutes</span>
+              <button
+                onClick={() => setTimerEnabled(!timerEnabled)}
+                className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
+                  timerEnabled ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'
+                }`}
+                disabled={!isPaused}
+              >
+                {timerEnabled ? 'Timer On' : 'Timer Off'}
+              </button>
+            </div>
+
+            {timerEnabled && remainingTime > 0 && (
+              <div className="flex items-center text-gray-600">
+                <Timer className="w-5 h-5 mr-2" />
+                <span>
+                  {Math.floor(remainingTime / 60)}:{(remainingTime % 60).toString().padStart(2, '0')} remaining
+                </span>
+              </div>
+            )}
 
             <button
               onClick={saveToHistory}
