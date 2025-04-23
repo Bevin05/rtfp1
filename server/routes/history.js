@@ -34,9 +34,9 @@ router.get('/api/analytics', authenticateToken, async (req, res) => {
       [req.user.id]
     );
 
-    // Get language statistics
-    const languageStats = await db.all(
-      'SELECT language, COUNT(*) as count FROM history WHERE user_id = ? GROUP BY language',
+    // Get voice statistics
+    const voiceStats = await db.all(
+      'SELECT voice, COUNT(*) as count FROM history WHERE user_id = ? GROUP BY voice',
       [req.user.id]
     );
 
@@ -44,7 +44,7 @@ router.get('/api/analytics', authenticateToken, async (req, res) => {
       totalConversions: totalConversions.count,
       totalCharacters: totalCharacters.total || 0,
       languageStats: Object.fromEntries(
-        languageStats.map(stat => [stat.language, stat.count])
+        voiceStats.map(stat => [stat.voice, stat.count])
       )
     };
 
@@ -105,6 +105,63 @@ router.get('/api/shared/:shareId', async (req, res) => {
   } catch (error) {
     console.error('Error fetching shared item:', error);
     res.status(500).json({ error: 'Failed to fetch shared item' });
+  }
+});
+
+// Delete history item
+router.delete('/api/history/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Verify the history item belongs to the user
+    const historyItem = await db.get(
+      'SELECT * FROM history WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
+
+    if (!historyItem) {
+      return res.status(404).json({ error: 'History item not found' });
+    }
+
+    // Delete the history item
+    await db.run(
+      'DELETE FROM history WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
+
+    res.json({ message: 'History item deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting history item:', error);
+    res.status(500).json({ error: 'Failed to delete history item' });
+  }
+});
+
+// Toggle favorite status
+router.patch('/api/history/:id/favorite', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { favorite } = req.body;
+    
+    // Verify the history item belongs to the user
+    const historyItem = await db.get(
+      'SELECT * FROM history WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
+
+    if (!historyItem) {
+      return res.status(404).json({ error: 'History item not found' });
+    }
+
+    // Update the favorite status
+    await db.run(
+      'UPDATE history SET favorite = ? WHERE id = ? AND user_id = ?',
+      [favorite, id, req.user.id]
+    );
+
+    res.json({ message: 'Favorite status updated successfully' });
+  } catch (error) {
+    console.error('Error updating favorite status:', error);
+    res.status(500).json({ error: 'Failed to update favorite status' });
   }
 });
 

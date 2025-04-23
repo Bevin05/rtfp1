@@ -25,8 +25,10 @@ await db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     text TEXT NOT NULL,
-    language TEXT NOT NULL,
+    voice TEXT NOT NULL,
+    settings TEXT NOT NULL,
     share_id TEXT UNIQUE,
+    favorite BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users (id)
   );
